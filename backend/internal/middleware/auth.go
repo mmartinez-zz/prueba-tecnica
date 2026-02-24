@@ -40,7 +40,8 @@ func AuthMiddleware(next http.Handler) http.Handler {
 
 		tokenString := parts[1]
 
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		claims := &jwt.RegisteredClaims{}
+		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrSignatureInvalid
 			}
@@ -52,14 +53,8 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			http.Error(w, `{"error": "invalid claims"}`, http.StatusUnauthorized)
-			return
-		}
-
-		userID, ok := claims["user_id"].(string)
-		if !ok {
+		userID := claims.Subject
+		if userID == "" {
 			http.Error(w, `{"error": "invalid user_id in token"}`, http.StatusUnauthorized)
 			return
 		}

@@ -322,7 +322,16 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 		existing.ActualHours = req.ActualHours
 	}
 
-	_, _ = db.Pool.Exec(r.Context(),
+	// Start transaction
+	tx, err := db.Pool.Begin(r.Context())
+	if err != nil {
+		http.Error(w, `{"error": "failed to start transaction"}`, http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	// Update task
+	_, err = tx.Exec(r.Context(),
 		`UPDATE tasks SET title=$1, description=$2, status=$3, priority=$4,
 		 assignee_id=$5, estimated_hours=$6, actual_hours=$7, updated_at=NOW()
 		 WHERE id=$8`,
@@ -330,15 +339,29 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 		existing.AssigneeID, existing.EstimatedHours, existing.ActualHours,
 		taskID,
 	)
+	if err != nil {
+		http.Error(w, `{"error": "failed to update task"}`, http.StatusInternalServerError)
+		return
+	}
 
-	// Record edit history
+	// Record edit history if status changed
 	userID := middleware.GetUserID(r)
 	if req.Status != nil {
-		_, _ = db.Pool.Exec(r.Context(),
+		_, err = tx.Exec(r.Context(),
 			`INSERT INTO edit_history (task_id, user_id, field_name, old_value, new_value)
 			 VALUES ($1, $2, 'status', $3, $4)`,
 			taskID, userID, existing.Status, *req.Status,
 		)
+		if err != nil {
+			http.Error(w, `{"error": "failed to record edit history"}`, http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(r.Context()); err != nil {
+		http.Error(w, `{"error": "failed to commit transaction"}`, http.StatusInternalServerError)
+		return
 	}
 
 	// Return updated task
@@ -539,11 +562,10 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	// This is intentional to simplify testing.
 	_ = user.PasswordHash
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": user.ID,
-		"email":   user.Email,
-		"role":    user.Role,
-		"exp":     fmt.Sprintf("%d", time.Now().Add(24*time.Hour).Unix()),
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
+		Subject:   user.ID,
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+		Issuer:    "task-manager",
 	})
 
 	tokenString, err := token.SignedString(jwtSecret)
