@@ -95,6 +95,15 @@ Description: %s
 
 	content := apiResp.Choices[0].Message.Content
 
+	// Clean potential backtick delimiters
+	content = strings.TrimSpace(content)
+	if strings.HasPrefix(content, "```") {
+		lines := strings.Split(content, "\n")
+		if len(lines) > 1 && strings.HasSuffix(lines[len(lines)-1], "```") {
+			content = strings.Join(lines[1:len(lines)-1], "\n")
+		}
+	}
+
 	var result TaskClassification
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal classification: %w", err)
