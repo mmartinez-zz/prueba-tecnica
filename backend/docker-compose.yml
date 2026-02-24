@@ -9,6 +9,7 @@ services:
       POSTGRES_PASSWORD: password
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - /Users/mao/projects/personal/prueba-tecnica/database/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
     healthcheck:
@@ -24,7 +25,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:password@postgres:5432/taskmanager
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/taskmanager?sslmode=disable
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=postgres
