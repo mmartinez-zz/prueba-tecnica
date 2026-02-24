@@ -37,8 +37,13 @@ func (s *TaskService) ClassifyTask(ctx context.Context, taskID string) (*model.T
 		return nil, fmt.Errorf("failed to get task: %w", err)
 	}
 
+	var description string
+	if task.Description != nil {
+		description = *task.Description
+	}
+
 	// Call LLM
-	classification, err := s.LLM.ClassifyTask(ctx, task.Title, *task.Description)
+	classification, err := s.LLM.ClassifyTask(ctx, task.Title, description)
 	if err != nil {
 		return nil, fmt.Errorf("failed to classify task: %w", err)
 	}
