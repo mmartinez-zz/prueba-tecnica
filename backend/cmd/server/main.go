@@ -64,6 +64,7 @@ func main() {
 		// Task extras
 		r.Get("/tasks/{id}/history", handler.GetTaskHistory)
 		r.Get("/tasks/search", handler.SearchTasks)
+		r.Post("/tasks/{id}/classify", handler.ClassifyTask)
 
 		// Dashboard
 		r.Get("/dashboard/stats", handler.GetDashboardStats)

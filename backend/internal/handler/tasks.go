@@ -14,8 +14,10 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/KemenyStudio/task-manager/internal/db"
+	"github.com/KemenyStudio/task-manager/internal/llm"
 	"github.com/KemenyStudio/task-manager/internal/middleware"
 	"github.com/KemenyStudio/task-manager/internal/model"
+	"github.com/KemenyStudio/task-manager/internal/service"
 )
 
 var jwtSecret []byte
@@ -277,6 +279,7 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateTask updates an existing task.
+// UpdateTask updates an existing task.
 func UpdateTask(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserID(r)
 	if !ok || userID == "" {
@@ -320,6 +323,9 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "failed to get task"})
 		return
 	}
+
+	// Save original status before any modifications
+	oldStatus := existing.Status
 
 	// Build update fields
 	if req.Title != nil {
@@ -384,12 +390,12 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Record edit history if status changed
-	if req.Status != nil {
+	// Record edit history if status actually changed
+	if req.Status != nil && oldStatus != *req.Status {
 		_, err = tx.Exec(r.Context(),
 			`INSERT INTO edit_history (task_id, user_id, field_name, old_value, new_value)
 			 VALUES ($1, $2, 'status', $3, $4)`,
-			taskID, userID, existing.Status, *req.Status,
+			taskID, userID, oldStatus, *req.Status,
 		)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
@@ -587,6 +593,39 @@ func GetDashboardStats(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+// ClassifyTask classifies a task using AI and updates it.
+func ClassifyTask(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r)
+	if !ok || userID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	taskID := chi.URLParam(r, "id")
+
+	svc := &service.TaskService{
+		DB:  db.Pool,
+		LLM: &llm.OpenAIClient{},
+	}
+
+	task, err := svc.ClassifyTask(r.Context(), taskID)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "task not found") {
+			status = http.StatusNotFound
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(task)
 }
 
 // LoginHandler handles user authentication and returns a JWT token.
