@@ -171,25 +171,33 @@ func GetTask(w http.ResponseWriter, r *http.Request) {
 
 // CreateTask creates a new task.
 func CreateTask(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	if userID == "" {
-		http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+	userID, ok := middleware.GetUserID(r)
+	if !ok || userID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	var req model.CreateTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error": "invalid request body"}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
 		return
 	}
 
 	if req.Title == "" {
-		http.Error(w, `{"error": "title is required"}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "title is required"})
 		return
 	}
 
 	if len(req.Title) > 500 {
-		http.Error(w, `{"error": "title too long"}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "title too long"})
 		return
 	}
 
@@ -198,7 +206,9 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 		req.Status = "todo"
 	}
 	if !validStatuses[req.Status] {
-		http.Error(w, `{"error": "invalid status"}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid status"})
 		return
 	}
 
@@ -207,7 +217,9 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 		req.Priority = "medium"
 	}
 	if !validPriorities[req.Priority] {
-		http.Error(w, `{"error": "invalid priority"}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid priority"})
 		return
 	}
 
@@ -218,7 +230,9 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 			"SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)", *req.AssigneeID,
 		).Scan(&exists)
 		if err != nil || !exists {
-			http.Error(w, `{"error": "assignee not found"}`, http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "assignee not found"})
 			return
 		}
 	}
@@ -228,7 +242,9 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 	if req.DueDate != nil && *req.DueDate != "" {
 		parsed, err := time.Parse(time.RFC3339, *req.DueDate)
 		if err != nil {
-			http.Error(w, `{"error": "invalid due_date format, use RFC3339"}`, http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid due_date format, use RFC3339"})
 			return
 		}
 		dueDate = &parsed
@@ -249,7 +265,9 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Printf("error creating task: %v", err)
-		http.Error(w, `{"error": "failed to create task"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to create task"})
 		return
 	}
 
@@ -260,11 +278,21 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 
 // UpdateTask updates an existing task.
 func UpdateTask(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r)
+	if !ok || userID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
 	taskID := chi.URLParam(r, "id")
 
 	var req model.UpdateTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error": "invalid request body"}`, http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
 		return
 	}
 
@@ -281,11 +309,15 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err == pgx.ErrNoRows {
-		http.Error(w, `{"error": "task not found"}`, http.StatusNotFound)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "task not found"})
 		return
 	}
 	if err != nil {
-		http.Error(w, `{"error": "failed to get task"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to get task"})
 		return
 	}
 
@@ -299,7 +331,9 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 	if req.Status != nil {
 		validStatuses := map[string]bool{"todo": true, "in_progress": true, "review": true, "done": true}
 		if !validStatuses[*req.Status] {
-			http.Error(w, `{"error": "invalid status"}`, http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid status"})
 			return
 		}
 		existing.Status = *req.Status
@@ -307,7 +341,9 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 	if req.Priority != nil {
 		validPriorities := map[string]bool{"low": true, "medium": true, "high": true, "urgent": true}
 		if !validPriorities[*req.Priority] {
-			http.Error(w, `{"error": "invalid priority"}`, http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid priority"})
 			return
 		}
 		existing.Priority = *req.Priority
@@ -325,7 +361,9 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 	// Start transaction
 	tx, err := db.Pool.Begin(r.Context())
 	if err != nil {
-		http.Error(w, `{"error": "failed to start transaction"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to start transaction"})
 		return
 	}
 	defer tx.Rollback(r.Context())
@@ -340,12 +378,13 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 		taskID,
 	)
 	if err != nil {
-		http.Error(w, `{"error": "failed to update task"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to update task"})
 		return
 	}
 
 	// Record edit history if status changed
-	userID := middleware.GetUserID(r)
 	if req.Status != nil {
 		_, err = tx.Exec(r.Context(),
 			`INSERT INTO edit_history (task_id, user_id, field_name, old_value, new_value)
@@ -353,14 +392,18 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 			taskID, userID, existing.Status, *req.Status,
 		)
 		if err != nil {
-			http.Error(w, `{"error": "failed to record edit history"}`, http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "failed to record edit history"})
 			return
 		}
 	}
 
 	// Commit transaction
 	if err := tx.Commit(r.Context()); err != nil {
-		http.Error(w, `{"error": "failed to commit transaction"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to commit transaction"})
 		return
 	}
 
@@ -380,7 +423,9 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		http.Error(w, `{"error": "failed to retrieve updated task"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to retrieve updated task"})
 		return
 	}
 
@@ -411,13 +456,23 @@ func DeleteTask(w http.ResponseWriter, r *http.Request) {
 
 // GetTaskHistory returns the edit history for a task.
 func GetTaskHistory(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r)
+	if !ok || userID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
 	taskID := chi.URLParam(r, "id")
 
 	rows, err := db.Pool.Query(r.Context(),
 		`SELECT id, task_id, user_id, field_name, old_value, new_value, edited_at
 		 FROM edit_history WHERE task_id = $1 ORDER BY edited_at DESC`, taskID)
 	if err != nil {
-		http.Error(w, `{"error": "failed to get history"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to get history"})
 		return
 	}
 	defer rows.Close()
