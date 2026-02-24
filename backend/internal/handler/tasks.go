@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,8 +9,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/KemenyStudio/task-manager/internal/db"
 	"github.com/KemenyStudio/task-manager/internal/llm"
